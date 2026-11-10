@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Player</title>
+<style>
+  :root { --skipn: 10; }
+  [data-theme="graphite"] { --bg:#0f1115; --surface:#171a20; --surface2:#20242c; --text:#e8eaed; --muted:#9aa0aa; --accent:#3b82f6; --accent-text:#ffffff; --border:#2a2f39; }
+  [data-theme="midnight"] { --bg:#070b1a; --surface:#0e1530; --surface2:#16204a; --text:#e6ecff; --muted:#8c9acb; --accent:#22d3ee; --accent-text:#04202a; --border:#1f2b5c; }
+  [data-theme="emerald"]  { --bg:#08100d; --surface:#0f1b16; --surface2:#16281f; --text:#e5f3ec; --muted:#8fb0a0; --accent:#10b981; --accent-text:#03150e; --border:#1f3a2e; }
+  [data-theme="light"]    { --bg:#f3f4f6; --surface:#ffffff; --surface2:#eceef2; --text:#111827; --muted:#6b7280; --accent:#4f46e5; --accent-text:#ffffff; --border:#d6d9e0; }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size:18px; overflow:hidden; }
+  button { font-family: inherit; }
+  button:focus, [tabindex]:focus { outline:3px solid var(--accent); outline-offset:2px; }
+
+  .ic { width:24px; height:24px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+
+  /* ---------- Generic buttons ---------- */
+  .btn { display:inline-flex; align-items:center; gap:10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:12px 20px; font-size:17px; font-weight:600; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:var(--accent); color:var(--accent-text); border-color:var(--accent); }
+  .btn.lg { padding:16px 30px; font-size:20px; border-radius:12px; }
+  .btn.sm { padding:8px 14px; font-size:15px; }
+  .ib { background:transparent; border:0; color:inherit; width:48px; height:48px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; position:relative; font-size:16px; font-weight:700; }
+  .ib:hover { background:rgba(127,127,127,.28); }
+  .ib.txt { width:auto; padding:0 14px; border-radius:24px; min-width:56px; }
+  .ib.main { background:var(--accent); color:var(--accent-text); width:56px; height:56px; }
+  .ib.main:hover { filter:brightness(1.1); background:var(--accent); }
+  .ib .sn { position:absolute; left:0; right:0; top:50%; margin-top:-6px; text-align:center; font-size:9px; line-height:12px; font-weight:800; pointer-events:none; }
+
+  /* ---------- Home ---------- */
+  #home { position:fixed; inset:0; overflow-y:auto; background:var(--bg); }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 32px 40px; }
+  .hbar { display:flex; align-items:center; justify-content:space-between; padding:22px 0; border-bottom:1px solid var(--border); }
+  .brand { display:flex; align-items:center; gap:12px; font-size:22px; font-weight:700; letter-spacing:.2px; }
+  .brand .logo { width:40px; height:40px; border-radius:10px; background:var(--accent); color:var(--accent-text); display:flex; align-items:center; justify-content:center; }
+  .hero { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:36px; margin:28px 0; }
+  .hero h1 { margin:0 0 8px; font-size:30px; font-weight:700; }
+  .hero p { margin:0 0 24px; color:var(--muted); font-size:18px; }
+  #err { display:none; margin-top:18px; padding:12px 16px; border-radius:10px; border:1px solid #b91c1c; background:rgba(185,28,28,.14); color:#fca5a5; font-size:16px; }
+  [data-theme="light"] #err { color:#991b1b; }
+  .sec-head { display:flex; align-items:center; justify-content:space-between; margin:6px 0 14px; }
+  .sec-head h2 { margin:0; font-size:20px; font-weight:700; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:14px; }
+  .card { display:flex; align-items:center; gap:14px; text-align:left; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px; cursor:pointer; width:100%; }
+  .card:hover { border-color:var(--accent); }
+  .tile { width:64px; height:64px; border-radius:10px; background:var(--surface2); color:var(--accent); display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:12px; font-weight:800; gap:2px; flex:none; letter-spacing:.5px; }
+  .meta { min-width:0; flex:1; }
+  .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; font-size:17px; }
+  .sub { color:var(--muted); font-size:14px; margin:4px 0 8px; }
+  .pbar { height:4px; border-radius:2px; background:var(--surface2); overflow:hidden; }
+  .pbar i { display:block; height:100%; background:var(--accent); }
+  .empty { display:flex; align-items:center; gap:12px; color:var(--muted); padding:20px; border:1px dashed var(--border); border-radius:12px; font-size:16px; grid-column:1/-1; }
+
+  /* ---------- Player (base = overlay layouts) ---------- */
+  #player { position:fixed; inset:0; background:#000; display:none; color:#fff; }
+  #player.on { display:block; }
+  #stage { position:absolute; inset:0; background:#000; }
+  #v { width:100%; height:100%; object-fit:contain; background:#000; outline:none; }
+  video::cue { background:rgba(0,0,0,.65); color:#fff; font-size:1.2em; }
+  #topbar { position:absolute; top:0; left:0; right:0; z-index:3; display:flex; align-items:center; gap:10px; padding:14px 22px 40px; background:linear-gradient(rgba(0,0,0,.8), rgba(0,0,0,0)); transition:opacity .25s; }
+  #title { flex:1; min-width:0; font-size:19px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tright { display:flex; align-items:center; gap:4px; }
+  #bottombar { position:absolute; bottom:0; left:0; right:0; z-index:3; padding:46px 24px 16px; background:linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.88)); transition:opacity .25s; }
+  .ui-hide #topbar, .ui-hide #bottombar, .ui-hide #center { opacity:0; pointer-events:none; }
+  .ui-hide { cursor:none; }
+  #seekRow { display:flex; align-items:center; gap:14px; font-size:15px; font-variant-numeric:tabular-nums; }
+  #seek { flex:1; height:6px; border-radius:3px; background:rgba(255,255,255,.28); position:relative; cursor:pointer; }
+  #seek::before { content:""; position:absolute; left:0; right:0; top:-14px; bottom:-14px; }
+  #buf { position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,255,255,.28); border-radius:3px; }
+  #bar { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--accent); border-radius:3px; }
+  #thumb { position:absolute; top:50%; left:0; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:var(--accent); }
+  #ctlRow { display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
+  .grp { display:flex; align-items:center; gap:4px; }
+  #vol { width:90px; height:5px; border-radius:3px; background:rgba(255,255,255,.28); position:relative; cursor:pointer; margin:0 8px 0 2px; }
+  #vol::before { content:""; position:absolute; left:0; right:0; top:-12px; bottom:-12px; }
+  #volFill { position:absolute; left:0; top:0; bottom:0; width:100%; background:#fff; border-radius:3px; }
+
+  #center { display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:3; align-items:center; gap:44px; transition:opacity .25s; }
+  #center .ib { width:72px; height:72px; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); }
+  #center .ib .ic { width:30px; height:30px; }
+  #center .ib.big { width:96px; height:96px; background:var(--accent); color:var(--accent-text); border-color:transparent; }
+  #center .ib.big .ic { width:40px; height:40px; }
+  #center .ib .sn { font-size:11px; margin-top:-7px; }
+
+  /* Side panel (drawer in overlay layouts, column in studio) */
+  #side { position:absolute; top:0; right:0; bottom:0; width:390px; max-width:88%; z-index:6; background:var(--surface); color:var(--text); border-left:1px solid var(--border); display:flex; flex-direction:column; transform:translateX(100%); visibility:hidden; transition:transform .25s, visibility .25s; }
+  #side.open { transform:none; visibility:visible; }
+  .s-head { display:flex; align-items:center; gap:6px; padding:12px 14px; border-bottom:1px solid var(--border); }
+  .tab { background:transparent; border:0; color:var(--muted); font-size:16px; font-weight:700; padding:10px 14px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  .tab.sel { background:var(--surface2); color:var(--text); }
+  .s-spacer { flex:1; }
+  .s-body { flex:1; overflow-y:auto; padding:10px; }
+  .row { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:transparent; color:var(--text); border:1px solid transparent; border-radius:10px; padding:10px 12px; cursor:pointer; margin-bottom:4px; }
+  .row:hover { background:var(--surface2); }
+  .row.now { background:var(--surface2); border-color:var(--accent); }
+  .row .n { width:24px; color:var(--muted); font-size:14px; text-align:center; flex:none; }
+  .row .tile { width:44px; height:44px; font-size:10px; }
+
+  /* Layout: CINEMA */
+  [data-layout="cinema"] .grp-main { display:none; }
+  [data-layout="cinema"] #center { display:flex; }
+  [data-layout="cinema"] #topbar { background:linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,0)); }
+  [data-layout="cinema"] #seek { height:4px; }
+  [data-layout="cinema"] #bottombar { padding-top:30px; }
+
+  /* Layout: STUDIO */
+  [data-layout="studio"] #player.on { display:grid; grid-template-columns:minmax(0,1fr) 380px; grid-template-rows:auto minmax(0,1fr) auto; grid-template-areas:"top top" "stage side" "bottom side"; background:var(--bg); color:var(--text); }
+  [data-layout="studio"] #topbar { grid-area:top; position:static; background:var(--surface); border-bottom:1px solid var(--border); padding:10px 22px; }
+  [data-layout="studio"] #stage { grid-area:stage; position:relative; }
+  [data-layout="studio"] #bottombar { grid-area:bottom; position:static; background:var(--surface); border-top:1px solid var(--border); padding:14px 24px; }
+  [data-layout="studio"] #side { grid-area:side; position:static; transform:none; visibility:visible; width:auto; max-width:none; }
+  [data-layout="studio"] #bList, [data-layout="studio"] #sClose { display:none; }
+  [data-layout="studio"] #seek { background:var(--surface2); }
+  [data-layout="studio"] #buf { background:rgba(127,127,127,.3); }
+  [data-layout="studio"] #vol { background:var(--surface2); }
+  [data-layout="studio"] #volFill { background:var(--text); }
+  [data-layout="studio"] #center { display:none; }
+
+  /* ---------- Toast ---------- */
+  #toast { position:fixed; top:24px; left:50%; transform:translateX(-50%); background:rgba(15,17,21,.94); color:#fff; padding:10px 20px; border-radius:8px; font-size:17px; z-index:60; display:none; border:1px solid rgba(255,255,255,.18); max-width:80%; text-align:center; }
+
+  /* ---------- Settings modal ---------- */
+  .modal { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal.on { display:flex; }
+  .panel { background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:16px; width:100%; max-width:820px; max-height:94%; overflow-y:auto; padding:24px 28px; }
+  .p-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .p-head h2 { margin:0; font-size:24px; }
+  .panel h3 { margin:22px 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); }
+  .opts { display:flex; gap:12px; flex-wrap:wrap; }
+  .opt { flex:1; min-width:160px; background:var(--surface2); color:var(--text); border:2px solid transparent; border-radius:12px; padding:12px; text-align:left; cursor:pointer; position:relative; }
+  .opt:hover { border-color:var(--border); }
+  .opt.sel { border-color:var(--accent); }
+  .opt b { display:block; font-size:17px; margin-bottom:2px; }
+  .opt span.d { color:var(--muted); font-size:13px; }
+  .opt .tick { position:absolute; top:10px; right:10px; width:22px; height:22px; border-radius:50%; background:var(--accent); color:var(--accent-text); display:none; align-items:center; justify-content:center; }
+  .opt .tick .ic { width:14px; height:14px; stroke-width:3; }
+  .opt.sel .tick { display:flex; }
+  .opt.sm { min-width:0; flex:none; padding:10px 22px; text-align:center; font-weight:700; font-size:17px; }
+  .opt.th { min-width:0; display:flex; align-items:center; gap:12px; }
+  .sw { width:34px; height:34px; border-radius:50%; flex:none; border:2px solid rgba(127,127,127,.4); }
+  .pv { height:84px; border-radius:8px; background:#000; position:relative; overflow:hidden; border:1px solid var(--border); margin-bottom:10px; }
+  .pv i { position:absolute; display:block; background:rgba(255,255,255,.9); border-radius:3px; }
+  .pv .acc { background:var(--accent); }
+  .pv-classic .a { left:8px; right:8px; bottom:8px; height:4px; background:rgba(255,255,255,.35); }
+  .pv-classic .a2 { left:8px; width:45%; bottom:8px; height:4px; background:var(--accent); }
+  .pv-classic .b { left:8px; bottom:17px; width:34px; height:7px; opacity:.7; }
+  .pv-classic .c { right:8px; bottom:17px; width:46px; height:7px; opacity:.5; }
+  .pv-cinema .a { left:50%; top:50%; width:28px; height:28px; margin:-18px 0 0 -14px; border-radius:50%; }
+  .pv-cinema .b { left:8px; right:8px; bottom:8px; height:2px; background:rgba(255,255,255,.35); }
+  .pv-cinema .b2 { left:8px; width:35%; bottom:8px; height:2px; }
+  .pv-cinema .c { left:50%; top:50%; width:14px; height:14px; margin:-11px 0 0 -48px; border-radius:50%; opacity:.5; }
+  .pv-cinema .d { left:50%; top:50%; width:14px; height:14px; margin:-11px 0 0 26px; border-radius:50%; opacity:.5; }
+  .pv-studio { background:#12141a; }
+  .pv-studio .a { left:0; top:0; bottom:0; right:32%; background:#000; border-radius:0; }
+  .pv-studio .b { left:0; bottom:0; right:32%; height:14px; background:#262b35; border-radius:0; }
+  .pv-studio .c { left:6px; bottom:6px; width:30%; height:3px; }
+  .pv-studio .d { right:6px; top:8px; width:26%; height:5px; opacity:.5; }
+  .pv-studio .e { right:6px; top:20px; width:26%; height:5px; opacity:.3; }
+  .pv-studio .f { right:6px; top:32px; width:26%; height:5px; opacity:.3; }
+  .hint { color:var(--muted); font-size:14px; margin-top:16px; }
+  input[type=file] { display:none; }
+</style>
+</head>
+<body data-layout="classic" data-theme="graphite">
+
+<!-- Icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20" fill="currentColor"/><line x1="5" y1="19" x2="5" y2="5"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor"/><line x1="19" y1="5" x2="19" y2="19"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.18"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+</svg>
+
+<!-- ================= HOME ================= -->
+<div id="home">
+  <div class="wrap">
+    <div class="hbar">
+      <div class="brand"><div class="logo"><svg class="ic"><use href="#i-film" xlink:href="#i-film"/></svg></div><span>Media Player</span></div>
+      <button class="btn" id="hSettings"><svg class="ic"><use href="#i-sliders" xlink:href="#i-sliders"/></svg>Settings</button>
+    </div>
+
+    <div class="hero">
+      <h1>Play a video from your drive</h1>
+      <p>Select one or more videos from your file manager. Multiple files are added to a queue.</p>
+      <button class="btn primary lg" id="pickBtn"><svg class="ic"><use href="#i-folder" xlink:href="#i-folder"/></svg>Open video</button>
+      <div id="err"></div>
+      <div class="hint">Remote: OK = play / pause &nbsp;&middot;&nbsp; Left / Right = seek &nbsp;&middot;&nbsp; Up / Down = volume &nbsp;&middot;&nbsp; Back = previous screen</div>
+    </div>
+
+    <div class="sec-head">
+      <h2>Recently played</h2>
+      <button class="btn sm" id="clearHist"><svg class="ic" style="width:18px;height:18px"><use href="#i-trash" xlink:href="#i-trash"/></svg>Clear history</button>
+    </div>
+    <div class="grid" id="histGrid"></div>
+  </div>
+</div>
+
+<!-- ================= PLAYER ================= -->
+<div id="player">
+  <div id="topbar">
+    <button class="ib" id="tBack" title="Back"><svg class="ic"><use href="#i-arrow-left" xlink:href="#i-arrow-left"/></svg></button>
+    <div id="title"></div>
+    <div class="tright">
+      <button class="ib txt" id="bSpeed" title="Playback speed">1x</button>
+      <button class="ib" id="bSub" title="Subtitles"><svg class="ic"><use href="#i-cc" xlink:href="#i-cc"/></svg></button>
+      <button class="ib" id="bList" title="Queue and history"><svg class="ic"><use href="#i-list" xlink:href="#i-list"/></svg></button>
+      <button class="ib" id="bSet" title="Settings"><svg class="ic"><use href="#i-sliders" xlink:href="#i-sliders"/></svg></button>
+      <button class="ib" id="bFull" title="Fullscreen"><svg class="ic"><use href="#i-full" xlink:href="#i-full"/></svg></button>
+    </div>
+  </div>
+
+  <div id="stage">
+    <video id="v" playsinline></video>
+    <div id="center">
+      <button class="ib" id="cBack" title="Rewind"><svg class="ic"><use href="#i-back" xlink:href="#i-back"/></svg><span class="sn">10</span></button>
+      <button class="ib big" id="cPlay" title="Play / Pause"><svg class="ic"><use href="#i-pause" xlink:href="#i-pause"/></svg></button>
+      <button class="ib" id="cFwd" title="Forward"><svg class="ic"><use href="#i-fwd" xlink:href="#i-fwd"/></svg><span class="sn">10</span></button>
+    </div>
+  </div>
+
+  <div id="bottombar">
+    <div id="seekRow">
+      <span id="cur">0:00</span>
+      <div id="seek" tabindex="0"><div id="buf"></div><div id="bar"></div><div id="thumb"></div></div>
+      <span id="dur">0:00</span>
+    </div>
+    <div id="ctlRow">
+      <div class="grp grp-main">
+        <button class="ib" id="bPrev" title="Previous"><svg class="ic"><use href="#i-prev" xlink:href="#i-prev"/></svg></button>
+        <button class="ib" id="bBack" title="Rewind"><svg class="ic"><use href="#i-back" xlink:href="#i-back"/></svg><span class="sn">10</span></button>
+        <button class="ib main" id="bPlay" title="Play / Pause"><svg class="ic"><use href="#i-pause" xlink:href="#i-pause"/></svg></button>
+        <button class="ib" id="bFwd" title="Forward"><svg class="ic"><use href="#i-fwd" xlink:href="#i-fwd"/></svg><span class="sn">10</span></button>
+        <button class="ib" id="bNext" title="Next"><svg class="ic"><use href="#i-next" xlink:href="#i-next"/></svg></button>
+      </div>
+      <div class="grp grp-vol">
+        <button class="ib" id="bMute" title="Mute"><svg class="ic"><use href="#i-vol" xlink:href="#i-vol"/></svg></button>
+        <div id="vol"><div id="volFill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <aside id="side">
+    <div class="s-head">
+      <button class="tab sel" id="tabQ"><svg class="ic" style="width:18px;height:18px"><use href="#i-list" xlink:href="#i-list"/></svg>Queue</button>
+      <button class="tab" id="tabH"><svg class="ic" style="width:18px;height:18px"><use href="#i-history" xlink:href="#i-history"/></svg>History</button>
+      <span class="s-spacer"></span>
+      <button class="ib" id="sClose" title="Close"><svg class="ic"><use href="#i-x" xlink:href="#i-x"/></svg></button>
+    </div>
+    <div class="s-body" id="qList"></div>
+    <div class="s-body" id="hList" style="display:none"></div>
+  </aside>
+</div>
+
+<div id="toast"></div>
+
+<!-- ================= SETTINGS ================= -->
+<div class="modal" id="settings">
+  <div class="panel">
+    <div class="p-head">
+      <h2>Settings</h2>
+      <button class="ib" id="sCloseSet" title="Close"><svg class="ic"><use href="#i-x" xlink:href="#i-x"/></svg></button>
+    </div>
+
+    <h3>Player design</h3>
+    <div class="opts" id="optLayout">
+      <button class="opt" data-v="classic">
+        <span class="tick"><svg class="ic"><use href="#i-check" xlink:href="#i-check"/></svg></span>
+        <div class="pv pv-classic"><i class="b"></i><i class="c"></i><i class="a"></i><i class="a2 acc"></i></div>
+        <b>Classic</b><span class="d">Controls overlay the video and auto-hide</span>
+      </button>
+      <button class="opt" data-v="cinema">
+        <span class="tick"><svg class="ic"><use href="#i-check" xlink:href="#i-check"/></svg></span>
+        <div class="pv pv-cinema"><i class="a acc"></i><i class="c"></i><i class="d"></i><i class="b"></i><i class="b2 acc"></i></div>
+        <b>Cinema</b><span class="d">Minimal. Large centre controls, thin progress line</span>
+      </button>
+      <button class="opt" data-v="studio">
+        <span class="tick"><svg class="ic"><use href="#i-check" xlink:href="#i-check"/></svg></span>
+        <div class="pv pv-studio"><i class="a"></i><i class="b"></i><i class="c acc"></i><i class="d"></i><i class="e"></i><i class="f"></i></div>
+        <b>Studio</b><span class="d">Video with a permanent queue and history panel</span>
+      </button>
+    </div>
+
+    <h3>Theme</h3>
+    <div class="opts" id="optTheme">
+      <button class="opt th" data-v="graphite"><span class="sw" style="background:linear-gradient(135deg,#171a20 50%,#3b82f6 50%)"></span><b>Graphite</b></button>
+      <button class="opt th" data-v="midnight"><span class="sw" style="background:linear-gradient(135deg,#0e1530 50%,#22d3ee 50%)"></span><b>Midnight</b></button>
+      <button class="opt th" data-v="emerald"><span class="sw" style="background:linear-gradient(135deg,#0f1b16 50%,#10b981 50%)"></span><b>Emerald</b></button>
+      <button class="opt th" data-v="light"><span class="sw" style="background:linear-gradient(135deg,#ffffff 50%,#4f46e5 50%)"></span><b>Light</b></button>
+    </div>
+
+    <h3>Skip interval (seconds)</h3>
+    <div class="opts" id="optSkip">
+      <button class="opt sm" data-v="5">5</button>
+      <button class="opt sm" data-v="10">10</button>
+      <button class="opt sm" data-v="15">15</button>
+      <button class="opt sm" data-v="30">30</button>
+    </div>
+
+    <h3>Subtitles</h3>
+    <div class="opts">
+      <button class="btn" id="sLoadSub"><svg class="ic"><use href="#i-cc" xlink:href="#i-cc"/></svg>Load subtitle file (.srt / .vtt)</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="video/*,.mkv,.mp4,.avi,.mov,.webm,.3gp,.m4v,.ts" multiple>
+<input type="file" id="subInput" accept=".srt,.vtt,text/vtt,application/x-subrip">
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var v = $('v'), player = $('player'), home = $('home'), side = $('side');
+  var fileInput = $('fileInput'), subInput = $('subInput');
+  var toastEl = $('toast'), errEl = $('err');
+  var bar = $('bar'), buf = $('buf'), thumb = $('thumb'), seek = $('seek');
+  var curEl = $('cur'), durEl = $('dur'), titleEl = $('title');
+  var settingsEl = $('settings');
+
+  function ic(n, style) {
+    return '<svg class="ic"' + (style ? ' style="' + style + '"' : '') + '><use href="#i-' + n + '" xlink:href="#i-' + n + '"></use></svg>';
+  }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmt(t) {
+    if (!isFinite(t) || t < 0) return '0:00';
+    t = Math.floor(t);
+    var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    return h ? h + ':' + pad(m) + ':' + pad(s) : m + ':' + pad(s);
+  }
+  function ago(ts) {
+    var d = new Date(ts), n = new Date();
+    var t = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    if (d.toDateString() === n.toDateString()) return 'Today, ' + t;
+    var y = new Date(n.getTime() - 86400000);
+    if (d.toDateString() === y.toDateString()) return 'Yesterday, ' + t;
+    return d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+  }
+  function ext(name) {
+    var m = /\.([a-z0-9]+)$/i.exec(name);
+    return m ? m[1].toUpperCase().slice(0, 4) : 'VID';
+  }
+
+  /* ---------------- Settings ---------------- */
+  var DEF = { layout: 'classic', theme: 'graphite', skip: 10 };
+  var S = { layout: DEF.layout, theme: DEF.theme, skip: DEF.skip };
+  try {
+    var saved = JSON.parse(localStorage.getItem('tvp_settings'));
+    if (saved) {
+      if (saved.layout) S.layout = saved.layout;
+      if (saved.theme) S.theme = saved.theme;
+      if (saved.skip) S.skip = saved.skip;
+    }
+  } catch (e) {}
+  function saveSettings() { try { localStorage.setItem('tvp_settings', JSON.stringify(S)); } catch (e) {} }
+
+  function markSel(groupId, val) {
+    var b = $(groupId).querySelectorAll('.opt');
+    for (var i = 0; i < b.length; i++) {
+      b[i].className = b[i].className.replace(/\s*\bsel\b/g, '');
+      if (b[i].getAttribute('data-v') === String(val)) b[i].className += ' sel';
+    }
+  }
+  function applySettings() {
+    document.body.setAttribute('data-layout', S.layout);
+    document.body.setAttribute('data-theme', S.theme);
+    markSel('optLayout', S.layout);
+    markSel('optTheme', S.theme);
+    markSel('optSkip', S.skip);
+    var sn = document.querySelectorAll('.sn');
+    for (var i = 0; i < sn.length; i++) sn[i].textContent = S.skip;
+    if (S.layout === 'studio') { side.classList.remove('open'); player.classList.remove('ui-hide'); }
+    if (playerOn) showUI();
+  }
+  function bindGroup(groupId, key, num) {
+    var g = $(groupId);
+    g.onclick = function (e) {
+      var n = e.target;
+      while (n && n !== g && !(n.className && /\bopt\b/.test(n.className))) n = n.parentNode;
+      if (!n || n === g) return;
+      var val = n.getAttribute('data-v');
+      S[key] = num ? parseInt(val, 10) : val;
+      saveSettings(); applySettings();
+    };
+  }
+
+  var settingsOn = false, lastFocus = null;
+  function openSettings() {
+    lastFocus = document.activeElement;
+    settingsOn = true;
+    settingsEl.className = 'modal on';
+    var sel = settingsEl.querySelector('#optLayout .sel') || settingsEl.querySelector('.opt');
+    if (sel) sel.focus();
+  }
+  function closeSettings() {
+    settingsOn = false;
+    settingsEl.className = 'modal';
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+    if (playerOn) showUI();
+  }
+
+  /* ---------------- History ---------------- */
+  var HKEY = 'tvp_history', memHist = [];
+  function loadHist() {
+    try { var h = JSON.parse(localStorage.getItem(HKEY)); if (h && h.length !== undefined) { memHist = h; return h; } } catch (e) {}
+    return memHist;
+  }
+  function saveHist(h) { memHist = h; try { localStorage.setItem(HKEY, JSON.stringify(h)); } catch (e) {} }
+  function fileKey(f) { return f.name + '|' + f.size; }
+  function findHist(k) {
+    var h = loadHist();
+    for (var i = 0; i < h.length; i++) if (h[i].key === k) return h[i];
+    return null;
+  }
+
+  var files = [], idx = -1, lastSave = 0, pendingResume = null, hintKey = null;
+  function recordProgress(force) {
+    if (idx < 0 || !files[idx] || !isFinite(v.duration) || !v.duration) return;
+    var now = Date.now();
+    if (!force && now - lastSave < 3000) return;
+    lastSave = now;
+    var k = fileKey(files[idx]);
+    var h = loadHist(), out = [];
+    for (var i = 0; i < h.length; i++) if (h[i].key !== k) out.push(h[i]);
+    out.unshift({ key: k, name: files[idx].name, size: files[idx].size, pos: v.currentTime, dur: v.duration, ts: now });
+    saveHist(out.slice(0, 40));
+  }
+
+  function histCard(e) {
+    var pct = e.dur ? Math.min(100, e.pos / e.dur * 100) : 0;
+    var done = pct > 95;
+    return '<button class="card" data-k="' + esc(e.key) + '">' +
+      '<div class="tile">' + ic('play', 'width:22px;height:22px') + '<span>' + esc(ext(e.name)) + '</span></div>' +
+      '<div class="meta"><div class="nm">' + esc(e.name) + '</div>' +
+      '<div class="sub">' + (done ? 'Watched' : fmt(e.pos) + ' / ' + fmt(e.dur)) + ' &middot; ' + ago(e.ts) + '</div>' +
+      '<div class="pbar"><i style="width:' + (done ? 100 : pct) + '%"></i></div></div></button>';
+  }
+  function histRow(e) {
+    var pct = e.dur ? Math.min(100, e.pos / e.dur * 100) : 0;
+    var done = pct > 95;
+    return '<button class="row" data-k="' + esc(e.key) + '">' +
+      '<div class="tile">' + esc(ext(e.name)) + '</div>' +
+      '<div class="meta"><div class="nm">' + esc(e.name) + '</div>' +
+      '<div class="sub" style="margin:3px 0 6px">' + (done ? 'Watched' : fmt(e.pos) + ' / ' + fmt(e.dur)) + ' &middot; ' + ago(e.ts) + '</div>' +
+      '<div class="pbar"><i style="width:' + (done ? 100 : pct) + '%"></i></div></div></button>';
+  }
+  function renderHistory() {
+    var h = loadHist(), g = '', l = '', i;
+    if (!h.length) {
+      g = '<div class="empty">' + ic('history') + '<span>No playback history yet. Videos you play will appear here.</span></div>';
+      l = '<div class="empty" style="margin:6px">' + ic('history') + '<span>No history yet</span></div>';
+    } else {
+      for (i = 0; i < h.length && i < 12; i++) g += histCard(h[i]);
+      for (i = 0; i < h.length; i++) l += histRow(h[i]);
+    }
+    $('histGrid').innerHTML = g;
+    $('hList').innerHTML = l;
+  }
+  function delegate(el, attr, fn) {
+    el.onclick = function (e) {
+      var n = e.target;
+      while (n && n !== el && !(n.getAttribute && n.getAttribute(attr) !== null)) n = n.parentNode;
+      if (n && n !== el) fn(n.getAttribute(attr));
+    };
+  }
+  function openHistory(k) {
+    for (var i = 0; i < files.length; i++) {
+      if (fileKey(files[i]) === k) { play(i); closeSide(); return; }
+    }
+    var e = findHist(k);
+    hintKey = k;
+    toast('Select "' + (e ? e.name : 'this video') + '" to continue where you stopped');
+    pickFiles();
+  }
+
+  /* ---------------- Toast / UI visibility ---------------- */
+  var toastT = null, hideT = null, playerOn = false;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { toastEl.style.display = 'none'; }, 1800);
+  }
+  function sideOpen() { return side.className.indexOf('open') > -1; }
+  function uiHidden() { return player.className.indexOf('ui-hide') > -1; }
+  function showUI() {
+    player.classList.remove('ui-hide');
+    clearTimeout(hideT);
+    if (S.layout === 'studio') return;
+    hideT = setTimeout(function () {
+      if (!v.paused && !sideOpen() && !settingsOn) player.classList.add('ui-hide');
+    }, 4000);
+  }
+
+  /* ---------------- Queue / side panel ---------------- */
+  function buildQueue() {
+    var h = '';
+    if (!files.length) h = '<div class="empty" style="margin:6px">' + ic('list') + '<span>Queue is empty</span></div>';
+    for (var i = 0; i < files.length; i++) {
+      h += '<button class="row' + (i === idx ? ' now' : '') + '" data-i="' + i + '">' +
+        '<span class="n">' + (i === idx ? ic('play', 'width:16px;height:16px;color:var(--accent)') : (i + 1)) + '</span>' +
+        '<div class="meta"><div class="nm">' + esc(files[i].name) + '</div></div></button>';
+    }
+    $('qList').innerHTML = h;
+  }
+  function setTab(t) {
+    $('tabQ').className = 'tab' + (t === 'q' ? ' sel' : '');
+    $('tabH').className = 'tab' + (t === 'h' ? ' sel' : '');
+    $('qList').style.display = t === 'q' ? 'block' : 'none';
+    $('hList').style.display = t === 'h' ? 'block' : 'none';
+  }
+  function openSide() {
+    buildQueue(); renderHistory();
+    if (S.layout !== 'studio') {
+      side.classList.add('open');
+      var f = $('qList').querySelector('.now') || $('tabQ');
+      try { f.focus(); } catch (e) {}
+    }
+    showUI();
+  }
+  function closeSide() {
+    side.classList.remove('open');
+    focusPlay();
+  }
+
+  /* ---------------- Playback ---------------- */
+  function pickFiles() { fileInput.value = ''; fileInput.click(); }
+
+  fileInput.addEventListener('change', function () {
+    var picked = Array.prototype.slice.call(fileInput.files || []);
+    if (!picked.length) return;
+    recordProgress(true);
+    files = picked;
+    idx = -1;
+    var start = 0;
+    if (hintKey) {
+      for (var i = 0; i < files.length; i++) if (fileKey(files[i]) === hintKey) { start = i; break; }
+      hintKey = null;
+    }
+    play(start);
+  });
+
+  var currentUrl = null, subUrl = null;
+  function play(i) {
+    if (i < 0 || i >= files.length) return;
+    if (idx >= 0 && files[idx]) recordProgress(true);
+    idx = i;
+    errEl.style.display = 'none';
+    pendingResume = null;
+    var e = findHist(fileKey(files[i]));
+    if (e && e.dur && e.pos > 10 && e.pos < e.dur - 15) pendingResume = e.pos;
+    if (currentUrl) { try { URL.revokeObjectURL(currentUrl); } catch (x) {} }
+    currentUrl = URL.createObjectURL(files[i]);
+    removeSubs();
+    v.src = currentUrl;
+    v.playbackRate = speeds[speedIdx];
+    titleEl.textContent = files[i].name;
+    enterPlayer();
+    buildQueue();
+    var p = v.play();
+    if (p && p.catch) p.catch(function () {});
+    showUI();
+    focusPlay();
+  }
+
+  var guard = false, ignorePop = false;
+  function enterPlayer() {
+    playerOn = true;
+    home.style.display = 'none';
+    player.classList.add('on');
+    if (!guard) { try { history.pushState({ p: 1 }, ''); guard = true; } catch (e) {} }
+  }
+  function goHome() {
+    recordProgress(true);
+    v.pause();
+    playerOn = false;
+    player.classList.remove('on');
+    side.classList.remove('open');
+    home.style.display = 'block';
+    renderHistory();
+    if (guard) { guard = false; ignorePop = true; try { history.back(); } catch (e) { ignorePop = false; } }
+    try { $('pickBtn').focus(); } catch (e) {}
+  }
+  function handleBack() {
+    if (settingsOn) { closeSettings(); return; }
+    if (sideOpen() && S.layout !== 'studio') { closeSide(); return; }
+    if (playerOn) goHome();
+  }
+  window.addEventListener('popstate', function () {
+    if (ignorePop) { ignorePop = false; return; }
+    if (!playerOn) return;
+    guard = false;
+    handleBack();
+    if (playerOn) { try { history.pushState({ p: 1 }, ''); guard = true; } catch (e) {} }
+  });
+
+  function focusPlay() {
+    var t = S.layout === 'cinema' ? $('cPlay') : $('bPlay');
+    try { t.focus(); } catch (e) {}
+  }
+
+  v.addEventListener('error', function () {
+    if (!playerOn) return;
+    errEl.textContent = 'This video could not be played. The device may not support its format. MP4 (H.264 video with AAC audio) is the most compatible.';
+    errEl.style.display = 'block';
+    goHome();
+  });
+  v.addEventListener('loadedmetadata', function () {
+    durEl.textContent = fmt(v.duration);
+    if (pendingResume) {
+      try { v.currentTime = pendingResume; toast('Resumed from ' + fmt(pendingResume)); } catch (e) {}
+      pendingResume = null;
+    }
+  });
+  v.addEventListener('timeupdate', function () {
+    if (v.duration) {
+      var p = v.currentTime / v.duration * 100;
+      bar.style.width = p + '%';
+      thumb.style.left = p + '%';
+      try {
+        if (v.buffered.length) buf.style.width = (v.buffered.end(v.buffered.length - 1) / v.duration * 100) + '%';
+      } catch (e) {}
+    }
+    curEl.textContent = fmt(v.currentTime);
+    recordProgress(false);
+  });
+  function setPlayIcon(playing) {
+    var h = ic(playing ? 'pause' : 'play');
+    $('bPlay').innerHTML = h;
+    $('cPlay').innerHTML = h;
+  }
+  v.addEventListener('play', function () { setPlayIcon(true); showUI(); });
+  v.addEventListener('pause', function () { setPlayIcon(false); recordProgress(true); showUI(); });
+  v.addEventListener('ended', function () {
+    if (isFinite(v.duration)) {
+      var k = fileKey(files[idx]), h = loadHist(), out = [];
+      for (var i = 0; i < h.length; i++) if (h[i].key !== k) out.push(h[i]);
+      out.unshift({ key: k, name: files[idx].name, size: files[idx].size, pos: v.duration, dur: v.duration, ts: Date.now() });
+      saveHist(out.slice(0, 40));
+    }
+    if (idx < files.length - 1) play(idx + 1); else showUI();
+  });
+  function updateVol() {
+    $('volFill').style.width = (v.muted ? 0 : v.volume * 100) + '%';
+    $('bMute').innerHTML = ic(v.muted || v.volume === 0 ? 'mute' : 'vol');
+  }
+  v.addEventListener('volumechange', updateVol);
+
+  function togglePlay() { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause(); }
+  function skip(sec) {
+    if (!v.duration) return;
+    v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + sec));
+    toast((sec > 0 ? '+' : '') + sec + ' s   ' + fmt(v.currentTime) + ' / ' + fmt(v.duration));
+  }
+  function vol(d) {
+    v.muted = false;
+    v.volume = Math.max(0, Math.min(1, Math.round((v.volume + d) * 100) / 100));
+    toast('Volume ' + Math.round(v.volume * 100) + '%');
+  }
+  function fullscreen() {
+    var isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (isFs) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+    else {
+      var f = player.requestFullscreen || player.webkitRequestFullscreen;
+      if (f) { try { f.call(player); } catch (e) {} } else toast('Fullscreen is not supported on this device');
+    }
+  }
+
+  /* speed */
+  var speeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2], speedIdx = 2;
+  $('bSpeed').onclick = function () {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    v.playbackRate = speeds[speedIdx];
+    $('bSpeed').textContent = speeds[speedIdx] + 'x';
+    toast('Speed ' + speeds[speedIdx] + 'x');
+  };
+
+  /* ---------------- Subtitles ---------------- */
+  var subLoaded = false, subShowing = true;
+  function removeSubs() {
+    var t = v.querySelectorAll('track');
+    for (var i = 0; i < t.length; i++) v.removeChild(t[i]);
+    if (subUrl) { try { URL.revokeObjectURL(subUrl); } catch (e) {} subUrl = null; }
+    subLoaded = false; subShowing = true;
+  }
+  subInput.addEventListener('change', function () {
+    var f = subInput.files && subInput.files[0];
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      var txt = String(r.result).replace(/^\uFEFF/, '');
+      if (txt.indexOf('WEBVTT') !== 0) {
+        txt = 'WEBVTT\n\n' + txt.replace(/\r/g, '').replace(/(\d+:\d+:\d+),(\d+)/g, '$1.$2');
+      }
+      removeSubs();
+      subUrl = URL.createObjectURL(new Blob([txt], { type: 'text/vtt' }));
+      var tr = document.createElement('track');
+      tr.kind = 'subtitles'; tr.label = 'Subtitles'; tr.src = subUrl; tr['default'] = true;
+      v.appendChild(tr);
+      subLoaded = true; subShowing = true;
+      setTimeout(function () { if (v.textTracks && v.textTracks[0]) v.textTracks[0].mode = 'showing'; }, 300);
+      toast('Subtitles loaded');
+    };
+    r.readAsText(f);
+  });
+  $('bSub').onclick = function () {
+    if (subLoaded && v.textTracks && v.textTracks[0]) {
+      subShowing = !subShowing;
+      v.textTracks[0].mode = subShowing ? 'showing' : 'hidden';
+      toast(subShowing ? 'Subtitles on' : 'Subtitles off');
+    } else { subInput.value = ''; subInput.click(); }
+  };
+  $('sLoadSub').onclick = function () { subInput.value = ''; subInput.click(); };
+
+  /* ---------------- Wiring ---------------- */
+  $('pickBtn').onclick = pickFiles;
+  $('hSettings').onclick = openSettings;
+  $('bSet').onclick = openSettings;
+  $('sCloseSet').onclick = closeSettings;
+  settingsEl.onclick = function (e) { if (e.target === settingsEl) closeSettings(); };
+  $('clearHist').onclick = function () { saveHist([]); renderHistory(); toast('History cleared'); };
+  $('tBack').onclick = goHome;
+  $('bPlay').onclick = togglePlay;
+  $('cPlay').onclick = togglePlay;
+  $('bBack').onclick = $('cBack').onclick = function () { skip(-S.skip); };
+  $('bFwd').onclick = $('cFwd').onclick = function () { skip(S.skip); };
+  $('bPrev').onclick = function () { if (idx > 0) play(idx - 1); else toast('This is the first video'); };
+  $('bNext').onclick = function () { if (idx < files.length - 1) play(idx + 1); else toast('This is the last video'); };
+  $('bList').onclick = openSide;
+  $('sClose').onclick = closeSide;
+  $('bFull').onclick = fullscreen;
+  $('bMute').onclick = function () { v.muted = !v.muted; };
+  $('tabQ').onclick = function () { setTab('q'); };
+  $('tabH').onclick = function () { setTab('h'); };
+  delegate($('histGrid'), 'data-k', openHistory);
+  delegate($('hList'), 'data-k', openHistory);
+  delegate($('qList'), 'data-i', function (i) { play(parseInt(i, 10)); if (S.layout !== 'studio') closeSide(); });
+  bindGroup('optLayout', 'layout', false);
+  bindGroup('optTheme', 'theme', false);
+  bindGroup('optSkip', 'skip', true);
+
+  seek.onclick = function (e) {
+    var r = seek.getBoundingClientRect();
+    if (v.duration) v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * v.duration;
+  };
+  $('vol').onclick = function (e) {
+    var r = $('vol').getBoundingClientRect();
+    v.muted = false;
+    v.volume = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  };
+  v.onclick = function () { togglePlay(); showUI(); };
+  player.onmousemove = function () { if (playerOn) showUI(); };
+  window.addEventListener('pagehide', function () { recordProgress(true); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) recordProgress(true); });
+
+  /* ---------------- Keyboard / remote ---------------- */
+  document.addEventListener('keydown', function (e) {
+    var k = e.key, c = e.keyCode;
+    var isBack = (k === 'Escape' || k === 'Backspace' || k === 'GoBack' || c === 4 || c === 27);
+
+    if (settingsOn) { if (isBack) { e.preventDefault(); closeSettings(); } return; }
+    if (!playerOn) return;
+    if (isBack) { e.preventDefault(); handleBack(); return; }
+
+    var wasHidden = uiHidden();
+    showUI();
+
+    if (k === 'MediaPlayPause' || c === 179) { e.preventDefault(); togglePlay(); return; }
+    if (k === 'MediaTrackNext' || c === 176) { $('bNext').onclick(); return; }
+    if (k === 'MediaTrackPrevious' || c === 177) { $('bPrev').onclick(); return; }
+    if (k === 'MediaRewind' || c === 89) { skip(-30); return; }
+    if (k === 'MediaFastForward' || c === 90) { skip(30); return; }
+
+    var ae = document.activeElement;
+    if (ae && side.contains(ae)) return;                  /* default focus navigation inside panel */
+    var onBtn = ae && ae.tagName === 'BUTTON';
+
+    if (ae === seek && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+      e.preventDefault(); skip(k === 'ArrowLeft' ? -S.skip : S.skip); return;
+    }
+    if (k === 'f' || k === 'F') { fullscreen(); return; }
+    if (k === 'm' || k === 'M') { v.muted = !v.muted; return; }
+    if (k === ' ' && !onBtn) { e.preventDefault(); togglePlay(); return; }
+
+    if (k === 'ArrowLeft' && (wasHidden || !onBtn)) { e.preventDefault(); skip(-S.skip); return; }
+    if (k === 'ArrowRight' && (wasHidden || !onBtn)) { e.preventDefault(); skip(S.skip); return; }
+    if (k === 'ArrowUp' && (wasHidden || !onBtn)) { e.preventDefault(); vol(0.1); return; }
+    if (k === 'ArrowDown' && (wasHidden || !onBtn)) { e.preventDefault(); vol(-0.1); return; }
+    if ((k === 'Enter' || c === 13 || c === 23) && (wasHidden || !onBtn)) { e.preventDefault(); togglePlay(); }
+  });
+
+  /* ---------------- Init ---------------- */
+  applySettings();
+  updateVol();
+  renderHistory();
+  try { $('pickBtn').focus(); } catch (e) {}
+})();
+</script>
+</body>
+</html>
